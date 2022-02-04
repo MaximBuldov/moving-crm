@@ -1,40 +1,44 @@
-import './App.css';
-import {Redirect, Route, Switch} from "react-router-dom";
-import Login from "./pages/Login";
-import {useSelector} from "react-redux";
-import AddWork from "./pages/AddWork";
-import Home from "./pages/Home";
-import AllJobs from "./pages/AllJobs";
-import MyWorks from "./pages/MyWorks";
-import AllWorkers from "./pages/AllWorkers";
 import Menu from "./components/Menu";
-import React from "react";
-import logo from "./assets/logo.png"
+import React, {useMemo} from "react";
+import logo from "./assets/logo-white.png"
+import AppRouter from "./components/AppRouter";
+import {useDispatch, useSelector} from "react-redux";
+import {allRoutes} from "./routes";
+import {Layout} from "antd";
+import {collapseMenu} from "./store/slices/appSlice";
+import classNames from "classnames";
+
 
 function App() {
-    const isAuth = useSelector(({user}) => user.isAuth)
+    const {user: {data}, app: {collapsed}} = useSelector((state) => state)
+    const routes = useMemo(() => allRoutes(data?.user_role), [data?.user_role])
+    const dispatch = useDispatch()
+    const handelCollapseMenu = () => {
+        if (!collapsed && window.innerWidth < 900) {
+            dispatch(collapseMenu())
+        }
+    }
 
-    const routes = isAuth ? (
-        <Switch>
-            <Route path="/add-work" exact component={AddWork}/>
-            <Route path="/home" exact component={Home}/>
-            <Route path="/all-jobs" exact component={AllJobs}/>
-            <Route path="/salaries" exact component={AllWorkers}/>
-            <Route path="/my-works/:id" component={MyWorks}/>
-            <Redirect to="/home" />
-        </Switch>
-    ) : (
-        <Switch>
-            <Route path="/" exact component={Login}/>
-            <Redirect to="/" />
-        </Switch>
-    )
-      return (
-          <>
-              <img src={logo} alt="logo" width={250} style={{marginBottom: '50px'}}/>
-              {routes}
-              {isAuth && <Menu />}
-          </>
+    return (
+        <Layout style={{ minHeight: '100vh' }}>
+            <Layout.Sider
+                className="site-sidebar"
+                collapsible
+                collapsed={false}
+                trigger={null}
+            >
+                <img src={logo} className="white-logo" alt="logo" />
+                <Menu routes={routes} />
+            </Layout.Sider>
+
+            <Layout onClick={handelCollapseMenu}  style={{transition: '0.5s'}} className={classNames({'site-layout': !collapsed, 'site-layout-collapsed': collapsed})}>
+                <Layout.Content style={{ margin: '0 16px' }}>
+                    <div className="site-layout-background" style={{ padding: '24px 0', minHeight: '100vh' }}>
+                        <AppRouter routes={routes} />
+                    </div>
+                </Layout.Content>
+            </Layout>
+        </Layout>
       );
 }
 

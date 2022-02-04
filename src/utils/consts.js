@@ -1,0 +1,7 @@
+export const HOME_ROUTE = '/home'
+export const ADD_JOB_ROUTE = '/add-job'
+export const ALL_JOBS_ROUTE = '/all-jobs'
+export const SALARIES_ROUTE = '/salaries'
+export const SCHEDULE_ROUTE = '/schedule'
+export const SINGLE_JOB_ROUTE = '/my-jobs/:id'
+export const API_ROUTE = 'https://db.smartpeoplemoving.com/wp-json'

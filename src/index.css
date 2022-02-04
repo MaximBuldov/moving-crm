@@ -1,9 +1,23 @@
 .main {
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10vh 0;
+}
+.white-logo {
+    padding: 16px;
+    width: 100%;
+}
+.site-sidebar {
+    overflow: auto;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.site-layout {
+    margin-left: 200px;
+}
+.site-layout-collapsed {
+    margin-left: 200px;
 }
 .ant-picker, .ant-input-number {
     width: 100%;
@@ -14,11 +28,122 @@
 .ant-table-summary {
     background: #fafafa;
 }
+input#addWork_total {
+    color: #242425;
+    font-weight: bold;
+}
+.rbc-event, .rbc-day-slot .rbc-background-event {
+    background-color: #1890ff;
+    border-radius: 0;
+}
+.rbc-event.rbc-selected, .rbc-day-slot .rbc-selected.rbc-background-event {
+    background-color: #1890ff;
+}
+form#addOrder {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+}
+
+form#addOrder .ant-row.ant-form-item {
+    width: 19%;
+}
+form#addOrder .order-form-3-columns .ant-row.ant-form-item {
+    width: 32%;
+}
+.add-order-list {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+.full-width, form#addOrder .full-width.ant-row.ant-form-item {
+    width: 100%;
+}
+.order-form-3-columns {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
 @media (max-width: 850px) {
-    .main {
-        padding: 30px;
-    }
     .ant-table {
         overflow-x: scroll;
+    }
+}
+@media (max-width: 550px) {
+    .site-sidebar {
+        z-index: 999;
+        overflow: initial;
+    }
+
+    .site-layout, .site-layout-collapsed {
+        margin-left: 0;
+    }
+    form#addOrder .order-form-3-columns .ant-row.ant-form-item, form#addOrder .ant-row.ant-form-item {
+        width: 100%;
+        flex-direction: row;
+    }
+    form#addOrder .ant-row.ant-form-item .ant-form-item-control {
+        display: block;
+        width: 100%;
+    }
+    .site-sidebar {
+        z-index: 999;
+        overflow: initial;
+        width: 100% !important;
+        max-width: 100% !important;
+        top: auto;
+        height: auto;
+        padding: 0;
+    }
+    img.white-logo, .ant-layout-sider-trigger {
+        display: none;
+    }
+    ul.custom-sider-menu {
+        display: flex;
+        overflow-x: auto;
+    }
+
+    ul.custom-sider-menu li > span {
+        display: block;
+        overflow: visible;
+        margin: 0;
+        line-height: 1;
+    }
+
+    ul.custom-sider-menu li {
+        flex-direction: column;
+        justify-content: center;
+        padding: 10px !important;
+        height: auto !important;
+        margin: 0 !important;
+    }
+
+    ul.custom-sider-menu li > span.ant-menu-title-content {
+        font-size: 12px;
+        margin: 0;
+    }
+
+    ul.custom-sider-menu li > span.anticon.ant-menu-item-icon {
+        font-size: 20px;
+        margin-bottom: 5px;;
+    }
+    .rbc-btn-group {
+        display: inline-block;
+        white-space: normal;
+        margin-bottom: 15px;
+    }
+    span.rbc-toolbar-label {
+        margin-bottom: 15px;
+        font-weight: bold;
+    }
+    .rbc-toolbar button {
+        padding: 15px 10px;
+        font-size: 14px;
+    }
+    .ant-layout-content {
+        margin-bottom: 58px !important;
     }
 }

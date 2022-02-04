@@ -1,18 +1,24 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import {Table, Tag} from "antd";
-import {useSelector} from "react-redux";
+import {useDispatch, useSelector} from "react-redux";
 import moment from "moment";
 import DataFilter from "../components/DataFilter"
 import SearchFilter from "../components/SearchFilter";
 import {SearchOutlined} from "@ant-design/icons";
+import {fetchJobs} from "../store/asyncActions/jobs";
 
 
 const AllJobs = () => {
-	const {jobs, isLoading} = useSelector(({jobs}) => jobs)
+	const dispatch = useDispatch()
+	const {user: {data: {token}}, jobs: {data, status}} = useSelector(state => state)
+	useEffect(() => {
+		dispatch(fetchJobs({token}))
+	}, [dispatch])
+
 	const columns = [
 		{
 			title: 'Date',
-			dataIndex: 'date',
+			dataIndex: ['acf', 'date'],
 			key: 'date',
 			render: text => moment(text).format('MM/DD/YYYY'),
 			filterDropdown: ({ setSelectedKeys, confirm, clearFilters }) => (
@@ -21,7 +27,7 @@ const AllJobs = () => {
 			onFilter: (value, record) => moment(record.date).format('YYYY-MM') === value
 		},
 		{
-			title: 'ID',
+			title: 'Work №',
 			dataIndex: ['title', 'rendered'],
 			key: 'id',
 			filterDropdown: ({ setSelectedKeys, confirm, clearFilters, selectedKeys }) => (
@@ -32,38 +38,38 @@ const AllJobs = () => {
 		},
 		{
 			title: 'Workers count',
-			dataIndex: ['acf', 'workers_count'],
+			dataIndex: ['acf', 'foreman_info', 'workers_count'],
 			key: 'workers_count',
 		},
 		{
 			title: 'Workers',
-			dataIndex: ['acf', 'workers'],
+			dataIndex: ['acf', 'foreman_info', 'workers'],
 			key: 'workers',
-			render: text => text.map(el => <Tag key={el.worker.ID} color="processing">{el.worker.display_name}</Tag>),
+			render: workers => workers.map(el => <Tag key={el?.worker.ID} color="processing">{el?.worker.display_name}</Tag>),
 		},
 		{
 			title: 'Payment',
-			dataIndex: ['acf', 'payment', 'label'],
+			dataIndex: ['acf', 'foreman_info', 'payment', 'label'],
 			key: 'payment',
 		},
 		{
 			title: 'Total',
-			dataIndex: ['acf', 'total'],
+			dataIndex: ['acf', 'foreman_info', 'total'],
 			key: 'total',
 			render: text => `$${text}`
 		},
 		{
 			title: 'Time',
-			dataIndex: ['acf', 'total_time'],
+			dataIndex: ['acf', 'foreman_info', 'total_time'],
 			key: 'total_time',
-			render: text => `${Math.round((text/60)*100)/100}h`,
+			render: text => `${Math.round(text)}h`,
 		},
 	];
 	return (
-		<Table loading={isLoading} columns={columns} dataSource={jobs}
+		<Table loading={status === 'loading'} columns={columns} dataSource={data.filter(el => el.acf.completed === 'yes')} rowKey="id"
 			   summary={pageData => {
 				   let totalIncome = 0;
-				   pageData.forEach(({acf: {total}}) => {
+				   pageData.forEach(({acf: {foreman_info: {total}}}) => {
 					   totalIncome += Number(total)
 				   });
 

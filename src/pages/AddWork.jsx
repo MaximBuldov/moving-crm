@@ -10,16 +10,16 @@ import {
 	Select,
 	Spin,
 	Switch,
-	TimePicker,
 	Typography
 } from "antd";
 import moment from "moment";
-import axios from "axios";
 import {useDispatch, useSelector} from "react-redux";
 import {CheckOutlined, CloseOutlined, MinusCircleOutlined, PlusOutlined} from "@ant-design/icons";
-import {fetchWorkers} from "../redux/asyncActions/workers";
-import {calculator} from "../functions/calculator";
+import {fetchWorkers} from "../store/asyncActions/workers";
+import {calculator} from "../utils/calculator";
 import {useHistory} from "react-router-dom";
+import MaskedInput from "antd-mask-input";
+import {createJob, fetchJobs, updateJob} from "../store/asyncActions/jobs";
 
 const { Item, List } = Form
 const { Option } = Select
@@ -28,67 +28,87 @@ const AddWork = () => {
 	const [form] = Form.useForm()
 	const dispatch = useDispatch()
 	const history = useHistory()
-	const [sendData, setSendData] = useState(false);
-	const user = useSelector(({user}) => user)
-	const {workers, isLoading} = useSelector(({workers}) => workers)
-	const workersOption = workers.map(el => (
-		<Option key={el.id} value={el.id}>{el.name}</Option>
+	const [heavyItems, setHeavyItems] = useState(false);
+	const [addItems, setAddItems] = useState(false);
+	const [tips, setTips] = useState(false);
+	const [truckFee, setTruckFee] = useState(true);
+	const [discount, setDiscount] = useState([
+		{value: 'no', label:'No'},
+		{value: 'percent', label:'Yes, 10%'}
+	])
+	const {user: {data: {user_id, token, user_display_name}}, workers, jobs} = useSelector((state) => state)
+	const workersOption = workers.data.filter(el => el.id !== +user_id).map(el => (
+		<Option key={el.id} role={el.roles[0]} value={el.id}>{el.name}</Option>
 	))
 	useEffect(() => {
-		dispatch(fetchWorkers(user.user.token))
-	}, [user.user.token, dispatch]);
-	const covert_time = (label) => label ? moment.duration(moment(label).format('HH:mm:ss')).asMinutes() : 0
-	const calculateTotal = (changedValues, allValues) => {
-		if (Array.isArray(changedValues?.working_hours)) {
-			const total_time = allValues.working_hours.reduce((total, el) => {
-				return total + covert_time(el?.loading_time) + covert_time(el?.unloading_time) + ((el?.double_drive ? 2 : 1) * covert_time(el?.drive_time))
-			}, 0)
-			form.setFieldsValue({total_time})
+		if (workers.data.length === 0) {
+			dispatch(fetchWorkers(token))
 		}
-		form.setFieldsValue({total: calculator(allValues)})
-	}
-	const onFinish = async (values) => {
-		setSendData(true)
-		const data = {
-			status: 'publish',
-			title: values.title,
-			date: values.date,
-			fields: {
-				...values,
-				workers_count: values.workers.length,
-				working_hours: values.working_hours.map(el => ({
-					...el,
-					loading_time: moment(el.loading_time).format('HH:mm'),
-					unloading_time: moment(el.unloading_time).format('HH:mm'),
-					drive_time: moment(el.drive_time).format('HH:mm')
-				})),
-				workers: values.workers.map(el => ({
-					...el,
-					salary: Math.round(values.total_time/60*(el.worker_role === 'foreman' ? 25 : 20))
-				}))
-			}
-		}
-		try {
-			await axios({
-				method: 'POST',
-				url: 'https://db.smartpeoplemoving.com/wp-json/wp/v2/works',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${user.user.token}`
-				},
-				data: JSON.stringify(data)
-			})
-			form.resetFields()
-			message.success('Work added')
-			setSendData(false)
-			history.push('/home')
-		} catch (e) {
-			message.error('Error')
-			setSendData(false)
-			console.error(e)
-		}
+	}, [token, dispatch, workers.data]);
 
+	useEffect(() => {
+		if (jobs.data.length === 0) {
+			dispatch(fetchJobs(token))
+		}
+	}, [token, dispatch, jobs.data]);
+
+	useEffect(() => {
+		if (workers.status === 'rejected') {
+			message.error(workers.error)
+			history.push('/home')
+		}
+	}, [workers.status]);
+
+	useEffect(() => {
+		if (jobs.status === 'updated') {
+			form.resetFields()
+			message.success('Work updated')
+		} else if (jobs.status === 'rejected') {
+			message.error('Error')
+		}
+	}, [jobs.status])
+
+
+	const calculateTotal = (changedValues, allValues) => {
+		form.setFieldsValue({total: calculator(allValues, form)})
+	}
+	const onFinish = (values) => {
+		dispatch(updateJob({values, token, work_id: values.title}))
 	};
+
+	const onChangeHeavy = () => {
+		setHeavyItems(!heavyItems)
+		form.setFieldsValue({heavy_items: []})
+	}
+	const onChangeMaterial = () => {
+		setAddItems(!addItems)
+		form.setFieldsValue({add_items: []})
+	}
+	const onChangeTips = () => {
+		setTips(!tips)
+		form.setFieldsValue({tips: ''})
+	}
+	const onTruckFee = () => {
+		setTruckFee(!truckFee)
+		form.setFieldsValue({driving_time_price: null})
+		form.setFieldsValue({driving_time_fee: truckFee})
+		form.setFieldsValue({truck_fee: !truckFee})
+	}
+	const setWorkerRole = (value, option) => {
+		const allWorkers = form.getFieldValue('workers').map(el => {
+			if(el.worker === value) {
+				return {
+					...el,
+					g_role: option.role
+				}
+			}
+			return el
+		})
+		form.setFieldsValue({workers: [...allWorkers]})
+	}
+	const addDiscount = (item) => {
+		setDiscount([...discount, {value: item, label: `${item}$`}])
+	}
 	return (
 		<Spin spinning={false}>
 			<Form
@@ -99,20 +119,16 @@ const AddWork = () => {
 				initialValues={{
 					date: moment(Date.now()),
 					total_time: 0,
-					workers: [
-						{
-							id: +user.user.user_id,
-							worker: +user.user.user_id,
-							worker_role: 'foreman'
-						}
-					]
+					truck_fee: truckFee,
+					foreman: +user_id,
+					discount: 'no'
 				}}
 				form={form}
 				onValuesChange={calculateTotal}
 				size="large"
 			>
-				<Row style={{maxWidth: '600px'}} gutter={[16, 16]}>
-					<Col span={8}>
+				<Row gutter={16}>
+					<Col xs={24} lg={8}>
 						<Item
 							label="Date"
 							name="date"
@@ -121,16 +137,18 @@ const AddWork = () => {
 							<DatePicker style={{ width: '100%' }} name="date" disabled />
 						</Item>
 					</Col>
-					<Col span={8}>
+					<Col xs={24} lg={8}>
 						<Item
 							label="Work number"
 							name="title"
-							rules={[{ required: true, message: 'Please input work number!' }]}
+							rules={[{ required: true, message: 'Please choose work number!' }]}
 						>
-							<Input name="title"/>
+							<Select name="title" placeholder="№0000000">
+								{jobs.data.filter(el => moment(Date.now()).format('MM/DD/YYYY') === el.acf.date).map(el => <Option key={el.id} value={el.id}>{el.title.rendered}</Option>)}
+							</Select>
 						</Item>
 					</Col>
-					<Col span={8}>
+					<Col xs={24} lg={8}>
 						<Item
 							label="Payment method"
 							name="payment"
@@ -138,7 +156,8 @@ const AddWork = () => {
 						>
 							<Select name="payment" placeholder="Payment method">
 								<Option value="cash">Cash</Option>
-								<Option value="credit_card">Credit card</Option>
+								<Option value="credit_card">Credit card(+5%)</Option>
+								<Option value="credit_card_dollar">Credit card(+$10/h)</Option>
 								<Option value="check">Check</Option>
 								<Option value="zelle">Zelle</Option>
 								<Option value="venmo">Venmo</Option>
@@ -146,19 +165,40 @@ const AddWork = () => {
 						</Item>
 					</Col>
 					<Col span={24}>
-						<Typography.Title level={4}>Workers</Typography.Title>
+						<Typography.Title level={4}>Foreman</Typography.Title>
+					</Col>
+					<Col xs={24} lg={12}>
+						<Item name='foreman'>
+							<Select name='foreman' disabled>
+								<Option value={+user_id}>{user_display_name}</Option>
+							</Select>
+						</Item>
+					</Col>
+					<Col xs={24} lg={12}>
+						<Item
+							name='foreman_payment_type'
+							fieldKey='foreman_payment_type'
+							rules={[{ required: true, message: 'Choose payment type' }]}
+						>
+							<Select name='foreman_payment_type' placeholder="Payment type">
+								<Option value="check">Check</Option>
+								<Option value="cash">Cash</Option>
+							</Select>
+						</Item>
+					</Col>
+					<Col span={24}>
+						<Typography.Title level={4}>Helpers</Typography.Title>
 						<List name="workers" rules={[{ required: true, message: 'Please add workers!' }]}>
 							{(fields, { add, remove }) => (
 								<>
 									{fields.map(({ key, name, fieldKey, ...restField }) => (
 										<Row gutter={16} justify="space-between" key={key}>
-											<Col xs={24} lg={7}>
+											<Col xs={11} lg={12}>
 												<Item
 													{...restField}
 													name={[name, 'worker']}
 													fieldKey={[fieldKey, 'worker']}
 													rules={[{ required: true, message: 'Choose worker' }]}
-													style={{ width: '100%' }}
 												>
 													<Select
 														placeholder="Worker"
@@ -168,37 +208,40 @@ const AddWork = () => {
 														filterOption={(input, option) =>
 															option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
 														}
+														onChange={setWorkerRole}
 													>
 														{workersOption}
 													</Select>
 												</Item>
 											</Col>
-											<Col xs={24} lg={7}>
+											<Col xs={11} lg={11}>
 												<Item
 													{...restField}
 													name={[name, 'payment_type']}
 													fieldKey={[fieldKey, 'payment_type']}
 													rules={[{ required: true, message: 'Choose payment type' }]}
-													style={{ width: '100%' }}
 												>
 													<Select name={[name, 'payment_type']} placeholder="Payment type">
 														<Option value="check">Check</Option>
 														<Option value="cash">Cash</Option>
 													</Select>
 												</Item>
-											</Col>
-											<Col xs={22} lg={7}>
 												<Item
 													{...restField}
 													name={[name, 'worker_role']}
 													fieldKey={[fieldKey, 'worker_role']}
-													rules={[{ required: true, message: 'Choose worker role' }]}
-													style={{ width: '100%' }}
+													hidden
+													initialValue="helper"
 												>
-													<Select name={[name, 'worker_role']} placeholder="Worker role">
-														<Option value="foreman">Foreman</Option>
-														<Option value="helper">Helper</Option>
-													</Select>
+													<Input name={[name, 'worker_role']} />
+												</Item>
+												<Item
+													{...restField}
+													name={[name, 'g_role']}
+													fieldKey={[fieldKey, 'g_role']}
+													hidden
+												>
+													<Input name={[name, 'g_role']} />
 												</Item>
 											</Col>
 											<Col xs={2} lg={1}>
@@ -215,7 +258,7 @@ const AddWork = () => {
 										</Row>
 									))}
 									<Item>
-										<Button loading={isLoading} type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+										<Button loading={workers.status === 'loading'} type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
 											Add helper
 										</Button>
 									</Item>
@@ -224,88 +267,157 @@ const AddWork = () => {
 						</List>
 					</Col>
 					<Col span={24}>
-						<Typography.Title level={4}>Working hours</Typography.Title>
-						<List name="working_hours">
-							{(fields, { add, remove }) => (
-								<>
-									{fields.map(({ key, name, fieldKey, ...restField }) => (
-										<Row gutter={16} style={{width: '100%'}} key={key}>
-											<Col xs={24} lg={6}>
-												<Item
-													{...restField}
-													name={[name, 'loading_time']}
-													fieldKey={[fieldKey, 'loading_time']}
-													label="Loading time"
-												>
-													<TimePicker
-														showNow={false}
-														name={[name, 'loading_time']}
-														format={'HH:mm'}
-														minuteStep={5}
-													/>
-												</Item>
-											</Col>
-											<Col xs={24} lg={11}>
-												<Row gutter={16}>
-													<Col span={14}>
-														<Item
-															{...restField}
-															name={[name, 'drive_time']}
-															fieldKey={[fieldKey, 'drive_time']}
-															label="Drive time"
-														>
-															<TimePicker showNow={false} name={[name, 'drive_time']} format={'HH:mm'} minuteStep={5}/>
-														</Item>
-													</Col>
-													<Col span={10}>
-														<Item
-															{...restField}
-															name={[name, 'double_drive']}
-															fieldKey={[fieldKey, 'double_drive']}
-															label="Double drive?"
-															valuePropName="checked"
-														>
-															<Switch
-																checkedChildren={<CheckOutlined />}
-																unCheckedChildren={<CloseOutlined />}
-																name={[name, 'double_drive']}
-															/>
-														</Item>
-													</Col>
-
-												</Row>
-											</Col>
-											<Col xs={22} lg={6}>
-												<Item
-													{...restField}
-													name={[name, 'unloading_time']}
-													fieldKey={[fieldKey, 'unloading_time']}
-													label="Unloading time"
-
-												>
-													<TimePicker showNow={false} name={[name, 'unloading_time']} format={'HH:mm'} minuteStep={5}/>
-												</Item>
-											</Col>
-											<Col xs={2} lg={1}>
-												<MinusCircleOutlined onClick={() => remove(name)} />
-											</Col>
-										</Row>
-									))}
-									<Item>
-										<Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-											Add location
-										</Button>
-									</Item>
-
-								</>
-							)}
-						</List>
-						<Item name="total_time" hidden>
-							<InputNumber hidden name="total_time" prefix="Total time:" suffix="minutes" disabled />
+						<Typography.Title level={4}>Work</Typography.Title>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='loading_time'
+							fieldKey='loading_time'
+							label="Loading time"
+							rules={[{ required: true, message: 'Please input loading time!' }]}
+						>
+							<MaskedInput name='loading_time' mask="11:11" placeholder="00:00" />
 						</Item>
 					</Col>
+					<Col span={8}>
+						<Item
+							name='loading_flights'
+							fieldKey='loading_flights'
+							label="Flights of stairs"
+							rules={[{ required: true, message: 'Please input flights!' }]}
+						>
+							<InputNumber name='loading_flights' placeholder="0" />
+						</Item>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='loading_movers'
+							fieldKey='loading_movers'
+							label="Additional movers"
+						>
+							<InputNumber name='loading_movers' placeholder="0" />
+						</Item>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='drive_time'
+							fieldKey='drive_time'
+							label="Drive time"
+							rules={[{ required: true, message: 'Please input driving time!' }]}
+						>
+							<MaskedInput name='drive_time' mask="11:11" placeholder="00:00" />
+						</Item>
+					</Col>
+					<Col span={12}>
+						<Item
+							name='double_drive'
+							fieldKey='double_drive'
+							label="Double drive?"
+							valuePropName="checked"
+						>
+							<Switch
+								checkedChildren={<CheckOutlined />}
+								unCheckedChildren={<CloseOutlined />}
+								name='double_drive'
+							/>
+						</Item>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='unloading_time'
+							fieldKey='unloading_time'
+							label="Unloading time"
+							rules={[{ required: true, message: 'Please input driving time!' }]}
+						>
+							<MaskedInput name='unloading_time' mask="11:11" placeholder="00:00"/>
+						</Item>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='unloading_flights'
+							fieldKey='unloading_flights'
+							label="Flights of stairs"
+							rules={[{ required: true, message: 'Please input flights!' }]}
+						>
+							<InputNumber name='unloading_flights' placeholder="0" />
+						</Item>
+					</Col>
+					<Col span={8}>
+						<Item
+							name='unloading_movers'
+							fieldKey='unloading_movers'
+							label="Additional movers"
+						>
+							<InputNumber name='unloading_movers' placeholder="0" />
+						</Item>
+					</Col>
+					<Col xs={14} lg={8}>
+						<Item
+							label="Discount"
+							name="discount"
+						>
+							<Select name="discount" dropdownRender={menu => (
+								<>
+									{menu}
+									<div style={{ display: 'flex', flexWrap: 'nowrap', padding: 8 }}>
+										<Item name="customDiscount">
+											<InputNumber name="customDiscount"/>
+										</Item>
+										<Button onClick={() => addDiscount(form.getFieldValue('customDiscount'))}><PlusOutlined /> add</Button>
+									</div>
+								</>
+							)}>
+								{discount.map(el => (
+									<Option key={el.value} value={el.value}>{el.label}</Option>
+								))}
+							</Select>
+						</Item>
+					</Col>
+					<Col xs={12} lg={4}>
+						<Item
+							label="Truck fee"
+							name="truck_fee"
+							valuePropName="checked"
+						>
+							<Switch
+								checkedChildren="Yes"
+								unCheckedChildren="No"
+								name="truck_fee"
+								onChange={onTruckFee}
+							/>
+						</Item>
+					</Col>
+					<Col xs={12} lg={6}>
+						<Item
+							label="Driving time fee"
+							name="driving_time_fee"
+							valuePropName="checked"
+						>
+							<Switch
+								checkedChildren="Yes"
+								unCheckedChildren="No"
+								name="driving_time_fee"
+								onChange={onTruckFee}
+							/>
+						</Item>
+					</Col>
+					<Col xs={12} lg={6}>
+						{!truckFee && (
+							<Item
+								label="Driving time price"
+								name="driving_time_price"
+							>
+								<InputNumber
+									formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+									parser={value => value.replace(/\$\s?|(,*)/g, '')}
+									name="driving_time_price" placeholder="Driving time price"/>
+							</Item>
+						)}
+
+					</Col>
 					<Col span={24}>
-						<Typography.Title level={4}>Heavy items</Typography.Title>
+						<Typography.Title level={4}>Heavy items <Switch onChange={onChangeHeavy} checkedChildren="Yes" unCheckedChildren="No"/></Typography.Title>
+						{heavyItems && (
 							<List name="heavy_items">
 								{(fields, { add, remove }) => (
 									<>
@@ -317,7 +429,11 @@ const AddWork = () => {
 														name={[name, 'heavy_item']}
 														fieldKey={[fieldKey, 'heavy_item']}
 													>
-														<Input name={[name, 'heavy_item']} placeholder="Heavy item" />
+														<Select name={[name, 'heavy_item']} placeholder="Heavy item">
+															<Option value="piano">Piano</Option>
+															<Option value="safe">Safe</Option>
+															<Option value="heavy_furniture">Heavy furniture</Option>
+														</Select>
 													</Item>
 												</Col>
 												<Col span={11}>
@@ -347,92 +463,102 @@ const AddWork = () => {
 									</>
 								)}
 							</List>
+						)}
 					</Col>
 					<Col span={24}>
-						<Typography.Title level={4}>Additional items</Typography.Title>
-						<List name="add_items">
-							{(fields, { add, remove }) => (
-								<>
-									{fields.map(({ key, name, fieldKey, ...restField }) => (
-										<Row key={key} gutter={16}>
-											<Col span={11}>
-												<Item
-													{...restField}
-													name={[name, 'add_item']}
-													fieldKey={[fieldKey, 'add_item']}
-												>
-													<Select name={[name, 'add_item']} placeholder="Additional item">
-														<Option value="small">Small box</Option>
-														<Option value="medium">Medium box</Option>
-														<Option value="wardrobe">Wardrobe</Option>
-														<Option value="wrap_paper">Wrap paper</Option>
-														<Option value="bubble_wrap">Bubble wrap</Option>
-														<Option value="blankets">Blankets</Option>
-													</Select>
-												</Item>
-											</Col>
-											<Col span={11}>
-												<Item
-													{...restField}
-													name={[name, 'add_item_count']}
-													fieldKey={[fieldKey, 'add_item_count']}
-												>
-													<InputNumber name={[name, 'add_item_count']} placeholder="Count"/>
-												</Item>
-											</Col>
-											<Col span={2}>
-												<MinusCircleOutlined onClick={() => remove(name)} />
-											</Col>
-										</Row>
-									))}
-									<Form.Item>
-										<Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-											Add item
-										</Button>
-									</Form.Item>
-								</>
-							)}
-						</List>
+						<Typography.Title level={4}>Packing materials <Switch onChange={onChangeMaterial} checkedChildren="Yes" unCheckedChildren="No"/></Typography.Title>
+						{addItems && (
+							<List name="add_items">
+								{(fields, { add, remove }) => (
+									<>
+										{fields.map(({ key, name, fieldKey, ...restField }) => (
+											<Row key={key} gutter={16}>
+												<Col span={11}>
+													<Item
+														{...restField}
+														name={[name, 'add_item']}
+														fieldKey={[fieldKey, 'add_item']}
+													>
+														<Select name={[name, 'add_item']} placeholder="Additional item">
+															<Option value="small">Small box</Option>
+															<Option value="medium">Medium box</Option>
+															<Option value="wardrobe">Wardrobe</Option>
+															<Option value="wrap_paper">Wrap paper</Option>
+															<Option value="bubble_wrap">Bubble wrap</Option>
+															<Option value="blankets">Blankets</Option>
+														</Select>
+													</Item>
+												</Col>
+												<Col span={11}>
+													<Item
+														{...restField}
+														name={[name, 'add_item_count']}
+														fieldKey={[fieldKey, 'add_item_count']}
+													>
+														<InputNumber name={[name, 'add_item_count']} placeholder="Count"/>
+													</Item>
+												</Col>
+												<Col span={2}>
+													<MinusCircleOutlined onClick={() => remove(name)} />
+												</Col>
+											</Row>
+										))}
+										<Form.Item>
+											<Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+												Add item
+											</Button>
+										</Form.Item>
+									</>
+								)}
+							</List>
+						)}
 					</Col>
-
-					<Col xs={12} span={8}>
-						<Item
-							label="Truck fee"
-							name="truck_fee"
-							valuePropName="checked"
-						>
-							<Switch
-								checkedChildren="Yes"
-								unCheckedChildren="No"
-								name="truck_fee"
-							/>
-						</Item>
+					<Col span={24}>
+						<Typography.Title level={4}>Tips <Switch onChange={onChangeTips} checkedChildren="Yes" unCheckedChildren="No"/></Typography.Title>
+					</Col>
+					<Col span={24}>
+						{
+							tips && (
+								<Item
+									name="tips"
+								>
+									<InputNumber
+										formatter={value => `$${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+										parser={value => value.replace(/\$\s?|(,*)/g, '')}
+										name="tips"
+									/>
+								</Item>
+							)
+						}
 					</Col>
 					<Col xs={24} span={8}>
 						<Item
-							label="Total"
 							name="total"
+							style={{fontWeight: 'bold'}}
 						>
 							<InputNumber
-								formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+								formatter={value => `Total: $${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
 								parser={value => value.replace(/\$\s?|(,*)/g, '')}
 								name="total"
 								disabled
-
+								style={{background:"#fff"}}
 							/>
 						</Item>
 					</Col>
-
 					<Col span={24}>
+						<Item
+							name='total_time'
+							hidden
+						>
+							<InputNumber name='total_time' hidden />
+						</Item>
 						<Item>
-							<Button loading={sendData} type="primary" htmlType="submit">
+							<Button loading={jobs.status === 'loading'} type="primary" htmlType="submit">
 								Submit
 							</Button>
 						</Item>
 					</Col>
-
 				</Row>
-
 			</Form>
 		</Spin>
 	);
